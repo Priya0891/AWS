@@ -1,0 +1,57 @@
+package com.amazonaws.lambda.demo;
+
+import java.io.File;
+import java.net.URL;
+import java.nio.file.Paths;
+
+import com.amazonaws.AmazonClientException;
+import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
+import com.amazonaws.regions.Regions;
+import com.amazonaws.services.lambda.runtime.Context;
+import com.amazonaws.services.lambda.runtime.RequestHandler;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+import com.amazonaws.services.s3.transfer.TransferManager;
+import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
+import com.amazonaws.services.s3.transfer.Upload;
+
+public class S3LambdaFunctionHandler implements RequestHandler<Object, String> {
+
+    @Override
+    public String handleRequest(Object input, Context context) {
+        context.getLogger().log("Input: " + input);
+        
+        AmazonS3 amazonS3 = AmazonS3ClientBuilder
+        		  .standard()
+        		  .withCredentials(new DefaultAWSCredentialsProviderChain())
+        		  .withRegion(Regions.AP_SOUTH_1)
+        		  .build();
+        TransferManager tm = TransferManagerBuilder.standard()
+        		  .withS3Client(amazonS3)
+        		  .build();
+        String bucketName = "cognito-test1-bucket";
+        String keyName = "test.jpg";
+        URL res;
+        File file = null;
+		try {
+			res = getClass().getClassLoader().getResource("s3/test.jpg");
+			file = Paths.get(res.toURI()).toFile();
+			System.out.println(file.exists());
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+        
+        //Upload upload = tm.upload(bucketName, keyName, file);
+        try {
+        	amazonS3.putObject(bucketName, keyName, file);
+			//upload.waitForCompletion();
+		} catch (AmazonClientException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+        return file.getName();
+    }
+    
+
+}
