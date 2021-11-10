@@ -1,0 +1,100 @@
+package com.amazonaws.lambda.demo;
+
+import com.amazonaws.services.lambda.runtime.Context;
+import com.amazonaws.services.lambda.runtime.RequestHandler;
+
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityProviderClient;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.AccountRecoverySettingType;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminAddUserToGroupRequest;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminCreateUserRequest;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.AttributeType;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.CognitoIdentityProviderException;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.CreateGroupRequest;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.CreateUserPoolRequest;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.CreateUserPoolResponse;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.LambdaConfigType;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.PasswordPolicyType;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.RecoveryOptionNameType;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.RecoveryOptionType;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.UserPoolMfaType;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.UserPoolPolicyType;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.UsernameAttributeType;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.VerifiedAttributeType;
+
+public class LambdaFunctionHandler implements RequestHandler<Object, String> {
+
+    @Override
+    public String handleRequest(Object input, Context context) {
+        context.getLogger().log("Input: " + input);
+        
+        CognitoIdentityProviderClient cognitoClient = CognitoIdentityProviderClient.builder()
+                .region(Region.AP_SOUTH_1)
+                .build();
+        createPool(cognitoClient, "Tests2");
+        return "Hello from Lambda!";
+    }
+    
+	private static UserPoolPolicyType applyPasswordPolicy() {
+		PasswordPolicyType PasswordPolicyTypeBuilder = PasswordPolicyType.builder().minimumLength(10).requireNumbers(true).requireSymbols(true).build();
+    	return UserPoolPolicyType.builder().passwordPolicy(PasswordPolicyTypeBuilder).build();
+    }
+	
+	private static AccountRecoverySettingType applyAccRecoverySettings() {
+		AccountRecoverySettingType accountRecoverySettingType =  AccountRecoverySettingType.builder()
+				.recoveryMechanisms(RecoveryOptionType.builder()
+						.name(RecoveryOptionNameType.VERIFIED_EMAIL)
+						.priority(1)
+						.build())
+				.build();
+		return accountRecoverySettingType;
+	}
+	
+	private static LambdaConfigType applyLambdaTriggers() {
+		LambdaConfigType configuration =  LambdaConfigType.builder().postAuthentication("arn:aws:lambda:ap-south-1:025823357201:function:Test1")
+		.preAuthentication("arn:aws:lambda:ap-south-1:025823357201:function:Test1")
+		//.preSignUp("arn:aws:lambda:ap-south-1:025823357201:function:Test1")
+		.build();
+		
+		return configuration;
+	}
+	
+	private static void createAdminGroupAndUser(CognitoIdentityProviderClient cognitoClient, String poolId) {
+		
+		AttributeType emailAttr = AttributeType.builder().name("email").value("ptest1@yopmail.com").build();
+		AttributeType emailVerifiedAttr = AttributeType.builder().name("email_verified").value("true").build();
+		AdminCreateUserRequest adminCreateUserRequest =  AdminCreateUserRequest.builder().username("ptest1@yopmail.com")
+				.userPoolId(poolId)
+				.temporaryPassword("Test@1234987")
+				.userAttributes(emailAttr, emailVerifiedAttr).build();
+		cognitoClient.createGroup(CreateGroupRequest.builder().userPoolId(poolId).groupName("Admin").build());
+		cognitoClient.adminCreateUser(adminCreateUserRequest);
+		
+		AdminAddUserToGroupRequest addUserToGroupRequest = AdminAddUserToGroupRequest.builder().userPoolId(poolId).username("ptest1@yopmail.com").groupName("Admin").build();
+		cognitoClient.adminAddUserToGroup(addUserToGroupRequest);
+	}
+
+    public static String createPool(CognitoIdentityProviderClient cognitoClient, String userPoolName ) {
+
+        try {
+            CreateUserPoolResponse response = cognitoClient.createUserPool(
+                    CreateUserPoolRequest.builder()
+                            .poolName(userPoolName)
+                            .usernameAttributes(UsernameAttributeType.EMAIL)
+                            .policies(applyPasswordPolicy())
+                            .mfaConfiguration(UserPoolMfaType.OFF)
+                            .autoVerifiedAttributes(VerifiedAttributeType.EMAIL)
+                            .accountRecoverySetting(applyAccRecoverySettings())
+                            .lambdaConfig(applyLambdaTriggers())
+                            .build()
+            );
+            createAdminGroupAndUser(cognitoClient, response.userPool().id());
+            return response.userPool().id();
+
+        } catch (CognitoIdentityProviderException e){
+            System.err.println(e.awsErrorDetails().errorMessage());
+            System.exit(1);
+        }
+        return "";
+    }
+}
