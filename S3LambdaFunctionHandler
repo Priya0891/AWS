@@ -50,7 +50,7 @@ public class S3LambdaFunctionHandler implements RequestHandler<Object, String> {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-        return file.getName();
+        return ((AmazonS3Client) amazonS3).getResourceUrl(bucketName, keyName);
     }
     
 
