@@ -11,12 +11,19 @@ import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminCreate
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AttributeType;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.CognitoIdentityProviderException;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.CreateGroupRequest;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.CreateUserPoolClientRequest;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.CreateUserPoolClientResponse;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.CreateUserPoolRequest;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.CreateUserPoolResponse;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.ExplicitAuthFlowsType;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.LambdaConfigType;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.OAuthFlowType;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.PasswordPolicyType;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.RecoveryOptionNameType;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.RecoveryOptionType;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.TimeUnitsType;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.TokenValidityUnitsType;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.UpdateUserPoolClientRequest;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.UserPoolMfaType;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.UserPoolPolicyType;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.UsernameAttributeType;
@@ -74,7 +81,8 @@ public class LambdaFunctionHandler implements RequestHandler<Object, String> {
 		cognitoClient.adminAddUserToGroup(addUserToGroupRequest);
 	}
 
-    public static String createPool(CognitoIdentityProviderClient cognitoClient, String userPoolName ) {
+    public static ResponseDTO createPool(CognitoIdentityProviderClient cognitoClient, String userPoolName ) {
+    	ResponseDTO responseDTO = new ResponseDTO();
 
         try {
             CreateUserPoolResponse response = cognitoClient.createUserPool(
@@ -88,13 +96,28 @@ public class LambdaFunctionHandler implements RequestHandler<Object, String> {
                             .lambdaConfig(applyLambdaTriggers())
                             .build()
             );
+            CreateUserPoolClientResponse poolClientResponse = cognitoClient.createUserPoolClient(CreateUserPoolClientRequest.builder()
+            		.userPoolId(response.userPool().id())
+            		.accessTokenValidity(5)
+            		.idTokenValidity(10)
+            		.refreshTokenValidity(20)
+            		.tokenValidityUnits(TokenValidityUnitsType.builder()
+            				.accessToken(TimeUnitsType.MINUTES)
+            				.idToken(TimeUnitsType.DAYS)
+            				.refreshToken(TimeUnitsType.DAYS).build())
+            		.clientName("Jobbername")
+            		.allowedOAuthScopes("email")
+            		.explicitAuthFlows(ExplicitAuthFlowsType.ALLOW_USER_SRP_AUTH)
+            		.build());
             createAdminGroupAndUser(cognitoClient, response.userPool().id());
-            return response.userPool().id();
-
+            responseDTO.setClientId(poolClientResponse.userPoolClient().clientId());
+            responseDTO.setClientName(poolClientResponse.userPoolClient().clientName());
+            responseDTO.setPoolId(response.userPool().id());
+            responseDTO.setAuthFlowType("ALLOW_USER_SRP_AUTH");
         } catch (CognitoIdentityProviderException e){
             System.err.println(e.awsErrorDetails().errorMessage());
             System.exit(1);
         }
-        return "";
+        return responseDTO;
     }
 }
